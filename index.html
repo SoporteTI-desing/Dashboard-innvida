@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard Cotizaciones Sanaré & Nomad</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="top-bar-title">
+      <h1>Dashboard de Cotizaciones</h1>
+      <p>Sanaré &amp; Nomad en tiempo real (Firebase)</p>
+    </div>
+    <div class="top-bar-actions">
+      <button id="btnExportCsvResumen" class="btn primary">CSV resumen</button>
+      <button id="btnExportCsvDetallado" class="btn secondary">CSV detallado</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel panel-filtros">
+      <h2>Filtros</h2>
+
+      <div class="filtros-grid">
+        <div class="campo">
+          <label>Marca</label>
+          <div class="chips">
+            <label><input type="checkbox" class="filtro-marca" value="SANARE" checked> Sanaré</label>
+            <label><input type="checkbox" class="filtro-marca" value="NOMAD" checked> Nomad</label>
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Rango de fechas (por fecha de emisión)</label>
+          <div class="campo-inline">
+            <input type="date" id="filtroFechaInicio">
+            <span>a</span>
+            <input type="date" id="filtroFechaFin">
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Estatus 1</label>
+          <select id="filtroStatus1" multiple size="4"></select>
+          <small>Ctrl + clic para selección múltiple.</small>
+        </div>
+
+        <div class="campo">
+          <label>Estatus 2</label>
+          <select id="filtroStatus2" multiple size="4"></select>
+          <small>Ctrl + clic para selección múltiple.</small>
+        </div>
+
+        <div class="campo">
+          <label>Buscar (folio, paciente, médico, KAM)</label>
+          <input type="text" id="filtroTexto" placeholder="Buscar...">
+        </div>
+
+        <div class="campo campo-botones">
+          <button id="btnLimpiarFiltros" class="btn ghost">Limpiar filtros</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-resumen">
+      <h2>Resumen</h2>
+      <div class="cards-grid">
+        <article class="card">
+          <h3>Total global</h3>
+          <p class="card-total" id="totalGlobal">$0</p>
+          <p class="card-subtitle"><span id="totalGlobalCount">0</span> cotizaciones</p>
+        </article>
+
+        <article class="card">
+          <h3>Total Sanaré</h3>
+          <p class="card-total" id="totalSanare">$0</p>
+          <p class="card-subtitle"><span id="totalSanareCount">0</span> cotizaciones</p>
+        </article>
+
+        <article class="card">
+          <h3>Total Nomad</h3>
+          <p class="card-total" id="totalNomad">$0</p>
+          <p class="card-subtitle"><span id="totalNomadCount">0</span> cotizaciones</p>
+        </article>
+
+        <article class="card">
+          <h3>Ticket promedio</h3>
+          <p class="card-total" id="ticketPromedio">$0</p>
+          <p class="card-subtitle">Global / cotización</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel panel-tabla">
+      <div class="panel-header">
+        <h2>Detalle de cotizaciones</h2>
+        <span id="contadorFilas" class="badge">0 filas</span>
+      </div>
+
+      <div class="tabla-contenedor">
+        <table class="tabla" id="tablaCotizaciones">
+          <thead>
+            <tr>
+              <th>Marca</th>
+              <th>Folio</th>
+              <th>Fecha emisión</th>
+              <th>Paciente</th>
+              <th>Médico</th>
+              <th>KAM</th>
+              <th>Aseguradora</th>
+              <th>Total</th>
+              <th>Teléfono</th>
+              <th>Sede</th>
+              <th>Estatus 1</th>
+              <th>Estatus 2</th>
+              <th>Motivo / comentario</th>
+            </tr>
+          </thead>
+          <tbody id="tablaCotizacionesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel panel-graficos">
+      <h2>Gráficos</h2>
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Productividad por KAM</h3>
+          <canvas id="chartKams"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Cotizaciones por sede (Sanaré)</h3>
+          <canvas id="chartSedes"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Totales por prueba (Nomad)</h3>
+          <canvas id="chartPruebas"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Cotizaciones por mes</h3>
+          <canvas id="chartMeses"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3>Distribución por estatus 1</h3>
+          <canvas id="chartStatus1"></canvas>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <small>Dashboard en tiempo real con Firebase. Ajusta las colecciones en <code>js/main.js</code> si tu nombre es diferente.</small>
+  </footer>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
