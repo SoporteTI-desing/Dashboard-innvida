@@ -338,19 +338,39 @@ function renderTabla(filas) {
   contadorFilasElem.textContent = filas.length + " filas";
 }
 
+// Helper: define si una fila debe excluirse del resumen global
+function esExcluidaDeResumenGlobal(row) {
+  const st1 = (row.status1 || "").toLowerCase();
+  const st2 = (row.status2 || "").toLowerCase();
+
+  const exclStatus1 =
+    st1 === "perdida / rechazada" ||
+    st1 === "cancelada";
+
+  const exclStatus2 =
+    st2 === "no aplicada / vencida";
+
+  return exclStatus1 || exclStatus2;
+}
+
 // Totales
 function actualizarTotales(filas) {
-  const totalGlobal = filas.reduce((acc, r) => acc + (r.total || 0), 0);
-  const sanare = filas.filter(r => r.marca === "SANARE");
-  const nomad  = filas.filter(r => r.marca === "NOMAD");
+  // Para el resumen global excluimos:
+  // - Estatus 1: "Perdida / rechazada" y "Cancelada"
+  // - Estatus 2: "No aplicada / vencida"
+  const filasResumen = filas.filter(r => !esExcluidaDeResumenGlobal(r));
+
+  const totalGlobal = filasResumen.reduce((acc, r) => acc + (r.total || 0), 0);
+  const sanare = filasResumen.filter(r => r.marca === "SANARE");
+  const nomad  = filasResumen.filter(r => r.marca === "NOMAD");
   const totalSanare = sanare.reduce((a,r) => a + (r.total || 0), 0);
   const totalNomad  = nomad.reduce((a,r) => a + (r.total || 0), 0);
-  const ticket      = filas.length ? totalGlobal / filas.length : 0;
+  const ticket      = filasResumen.length ? totalGlobal / filasResumen.length : 0;
 
   totalGlobalElem.textContent = formatearMoneda(totalGlobal);
   totalSanareElem.textContent = formatearMoneda(totalSanare);
   totalNomadElem.textContent  = formatearMoneda(totalNomad);
-  totalGlobalCountElem.textContent = filas.length;
+  totalGlobalCountElem.textContent = filasResumen.length;
   totalSanareCountElem.textContent = sanare.length;
   totalNomadCountElem.textContent  = nomad.length;
   ticketPromedioElem.textContent   = formatearMoneda(ticket);
