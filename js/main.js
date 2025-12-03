@@ -467,7 +467,23 @@ chartPruebas = crearOActualizarChart(chartPruebas, "chartPruebas", "bar", {
   chartStatus1 = crearOActualizarChart(chartStatus1, "chartStatus1", "pie", {
     labels: Object.keys(conteo),
     datasets: [{ label: "Cotizaciones por estatus 1", data: Object.values(conteo) }]
-  }, { plugins: { legend: { position: "bottom" } }});
+  }, {
+    plugins: {
+      legend: { position: "bottom" },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || "";
+            const value = context.raw || 0;
+            const data = context.chart.data.datasets[0].data || [];
+            const total = data.reduce((sum, v) => sum + (typeof v === "number" ? v : 0), 0);
+            const porcentaje = total ? ((value * 100) / total).toFixed(1) : 0;
+            return `${label}: ${value} (${porcentaje}%)`;
+          }
+        }
+      }
+    }
+  });
 }
 
 function formatearMes(fecha) {
