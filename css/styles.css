@@ -311,9 +311,11 @@ body {
   white-space: nowrap;
 }
 
-/* Ajuste específico para que la columna "Fecha emisión" no se encime con Estatus 1 */
+/* Ajuste específico para que las columnas de fecha no se encimen con Estatus 1 */
 .tabla th:nth-child(3),
-.tabla td:nth-child(3) {
+.tabla td:nth-child(3),
+.tabla th:nth-child(4),
+.tabla td:nth-child(4) {
   min-width: 115px;
   max-width: 135px;
 }
@@ -332,6 +334,7 @@ body {
 }
 
 .tabla input[type="text"],
+.tabla input[type="date"],
 .tabla select {
   width: 100%;
   font-size: 0.75rem;

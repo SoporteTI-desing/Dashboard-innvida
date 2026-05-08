@@ -152,6 +152,7 @@ function mapSanareDoc(docSnap) {
     collection: SANARE_COLLECTION,
     folio: data.folio || "",
     fechaEmision: data.fechaEmision || "",
+    fechaCierre: data.fechaCierre || "",
     fechaProgramacion: data.fechaProgramacion || "",
     fechaValidez: data.fechaValidez || "",
     createdAt: data.createdAt || "",
@@ -188,6 +189,7 @@ function mapNomadDoc(docSnap) {
     collection: NOMAD_COLLECTION,
     folio: data.folio || "",
     fechaEmision: data.fechaEmision || "",
+    fechaCierre: data.fechaCierre || "",
     fechaProgramacion: data.fechaProgramacion || "",
     fechaValidez: data.fechaValidez || "",
     createdAt: data.createdAt || "",
@@ -258,6 +260,14 @@ function renderTabla(filas) {
     const tdMarca   = document.createElement("td"); tdMarca.textContent = row.marca;
     const tdFolio   = document.createElement("td"); tdFolio.textContent = row.folio;
     const tdFecha   = document.createElement("td"); tdFecha.textContent = row.fechaEmision || "";
+
+    const tdFechaCierre = document.createElement("td");
+    const inpFechaCierre = document.createElement("input");
+    inpFechaCierre.type = "date";
+    inpFechaCierre.value = row.fechaCierre || "";
+    inpFechaCierre.title = "Fecha de cierre";
+    tdFechaCierre.appendChild(inpFechaCierre);
+
     const tdPac     = document.createElement("td"); tdPac.textContent = row.paciente || "";
     const tdMed     = document.createElement("td"); tdMed.textContent = row.medico || "";
     const tdKam     = document.createElement("td"); tdKam.textContent = row.kam || "";
@@ -300,13 +310,21 @@ function renderTabla(filas) {
         await updateDoc(ref, {
           status1: sel1.value,
           status2: sel2.value,
-          motivo:  inpMotivo.value
+          motivo:  inpMotivo.value,
+          fechaCierre: inpFechaCierre.value || ""
         });
       } catch (e) {
         console.error("Error actualizando seguimiento:", e);
         alert("No se pudo guardar en Firebase. Revisa consola.");
       }
     };
+
+    inpFechaCierre.addEventListener("change", () => {
+      if (inpFechaCierre.value) {
+        sel1.value = "Cerrada / aceptada";
+      }
+      guardar();
+    });
 
     sel1.addEventListener("change", guardar);
     sel2.addEventListener("change", guardar);
@@ -321,6 +339,7 @@ function renderTabla(filas) {
     tr.appendChild(tdMarca);
     tr.appendChild(tdFolio);
     tr.appendChild(tdFecha);
+    tr.appendChild(tdFechaCierre);
     tr.appendChild(tdPac);
     tr.appendChild(tdMed);
     tr.appendChild(tdKam);
@@ -526,11 +545,11 @@ function exportarCsv(nombre, filas, detallado = false) {
   let encabezados, rows;
   if (!detallado) {
     encabezados = [
-      "marca","folio","fechaEmision","paciente","medico","kam",
+      "marca","folio","fechaEmision","fechaCierre","paciente","medico","kam",
       "aseguradora","total","telefono","sede","status1","status2","motivo"
     ];
     rows = filas.map(r => [
-      r.marca || "", r.folio || "", r.fechaEmision || "",
+      r.marca || "", r.folio || "", r.fechaEmision || "", r.fechaCierre || "",
       r.paciente || "", r.medico || "", r.kam || "",
       r.aseguradora || "", r.total || 0,
       r.telefono || "", r.sede || "",
@@ -538,7 +557,7 @@ function exportarCsv(nombre, filas, detallado = false) {
     ]);
   } else {
     encabezados = [
-      "marca","folio","fechaEmision","fechaProgramacion","fechaValidez",
+      "marca","folio","fechaEmision","fechaCierre","fechaProgramacion","fechaValidez",
       "paciente","medico","kam","aseguradora","total",
       "telefono","sede",
       "direccion","dx","esquema",
@@ -547,7 +566,7 @@ function exportarCsv(nombre, filas, detallado = false) {
       "status1","status2","motivo"
     ];
     rows = filas.map(r => [
-      r.marca || "", r.folio || "", r.fechaEmision || "",
+      r.marca || "", r.folio || "", r.fechaEmision || "", r.fechaCierre || "",
       r.fechaProgramacion || "", r.fechaValidez || "",
       r.paciente || "", r.medico || "", r.kam || "",
       r.aseguradora || "", r.total || 0,
