@@ -30,6 +30,15 @@ const firebaseConfigNomad = {
   appId: "1:736481537624:web:6f06667cf34bccc532642d"
 };
 
+const firebaseConfigNuevoSanare = {
+  apiKey: "AIzaSyCUFENXy1PE7Q6lX7c54F8hH3RjStM9Fdc",
+  authDomain: "cotizador-30.firebaseapp.com",
+  projectId: "cotizador-30",
+  storageBucket: "cotizador-30.firebasestorage.app",
+  messagingSenderId: "150005004914",
+  appId: "1:150005004914:web:5b217c06aa13e34b9960eb"
+};
+
 // IMPORTANTE: en ambos proyectos el nombre de la colección es "cotizaciones"
 const SANARE_COLLECTION = "cotizaciones";
 const NOMAD_COLLECTION  = "cotizaciones";
@@ -37,9 +46,11 @@ const NOMAD_COLLECTION  = "cotizaciones";
 // Inicializar apps
 const appSanare = initializeApp(firebaseConfigSanare, "sanareApp");
 const appNomad  = initializeApp(firebaseConfigNomad, "nomadApp");
+const appNuevoSanare = initializeApp(firebaseConfigNuevoSanare, "nuevoSanareApp");
 
 const dbSanare = getFirestore(appSanare);
 const dbNomad  = getFirestore(appNomad);
+const dbNuevoSanare = getFirestore(appNuevoSanare);
 
 // Estatus
 const ESTATUS_1_OPCIONES = [
@@ -74,6 +85,7 @@ function obtenerSedePorTelefono(telefono) {
 // Estado en memoria
 let sanareRows = [];
 let nomadRows  = [];
+let nuevoSanareRows = [];
 let allRows    = [];
 
 // DOM
@@ -132,6 +144,11 @@ function initRealtimeListeners() {
     nomadRows = snap.docs.map(d => mapNomadDoc(d));
     recomputeAll();
   }, err => console.error("Nomad listener error:", err));
+
+  onSnapshot(collection(dbNuevoSanare, "cotizaciones"), snap => {
+    nuevoSanareRows = snap.docs.map(d => mapNuevoSanareDoc(d));
+    recomputeAll();
+  }, err => console.error("Nuevo Sanare listener error:", err));
 }
 
 // Map docs
@@ -209,8 +226,79 @@ function mapNomadDoc(docSnap) {
   };
 }
 
+function mapNuevoSanareDoc(docSnap) {
+  const data = docSnap.data();
+  let total = 0;
+  if (data.total && typeof data.total === 'string') {
+    total = parseFloat(data.total.replace(/[^0-9.-]+/g, '')) || 0;
+  } else if (typeof data.total === 'number') {
+    total = data.total;
+  } else if (data.state && Array.isArray(data.state.items)) {
+    data.state.items.forEach(item => {
+      let price = 0;
+      const qty = item.qty || 1;
+      if (item.innovador && item.innovador.BOLSILLO) price = item.innovador.BOLSILLO;
+      else if (item.patente && item.patente.BOLSILLO) price = item.patente.BOLSILLO;
+      else if (item.BOLSILLO) price = item.BOLSILLO;
+      if (price) total += parseFloat(price) * qty;
+    });
+  }
+
+  let status1 = "Sin seguimiento";
+  if (data.status === 'APPROVED') {
+    status1 = "Cerrada / aceptada";
+  } else if (data.status === 'REJECTED') {
+    status1 = "Perdida / rechazada";
+  } else if (data.status === 'BORRADOR') {
+    status1 = "Sin seguimiento";
+  } else if (data.status === 'PENDING_KAM' || data.status === 'PENDING_QUIMICO' || data.status === 'PENDING_BI') {
+    status1 = "En negociación";
+  }
+
+  const paciente = data.form ? data.form.paciente : (data.paciente || "");
+  const medico = data.form ? data.form.medico : (data.medico || "");
+  const sede = data.form ? data.form.sede : "";
+
+  let fechaEmision = "";
+  if (data.createdAt) {
+      if (typeof data.createdAt.toDate === 'function') {
+          fechaEmision = data.createdAt.toDate().toISOString().split('T')[0];
+      } else if (typeof data.createdAt === 'number' || typeof data.createdAt === 'string') {
+          try { fechaEmision = new Date(data.createdAt).toISOString().split('T')[0]; } catch(e){}
+      }
+  }
+
+  return {
+    origen: "SANARE_NUEVO",
+    idFirestore: docSnap.id,
+    collection: "cotizaciones",
+    folio: data.folio || "",
+    fechaEmision: fechaEmision,
+    fechaCierre: data.fechaCierre || "",
+    fechaProgramacion: "",
+    fechaValidez: "",
+    createdAt: data.createdAt || "",
+    paciente: paciente,
+    medico: medico,
+    kam: data.kam || "",
+    aseguradora: "",
+    telefono: "",
+    sede: sede,
+    total: total,
+    direccion: "",
+    dx: "",
+    esquema: "",
+    servicios: [],
+    medicamentos: [],
+    marca: "SANARE",
+    status1: data.status1 || status1,
+    status2: data.status2 || "Sin aplicación",
+    motivo: data.motivo || ""
+  };
+}
+
 function recomputeAll() {
-  allRows = [...sanareRows, ...nomadRows];
+  allRows = [...sanareRows, ...nomadRows, ...nuevoSanareRows];
   aplicarFiltrosYRender();
 }
 
@@ -305,7 +393,10 @@ function renderTabla(filas) {
 
     const guardar = async () => {
       try {
-        const db = row.marca === "SANARE" ? dbSanare : dbNomad;
+        let db;
+        if (row.origen === "SANARE_NUEVO") db = dbNuevoSanare;
+        else if (row.origen === "SANARE") db = dbSanare;
+        else db = dbNomad;
         const ref = doc(db, row.collection, row.idFirestore);
         await updateDoc(ref, {
           status1: sel1.value,
