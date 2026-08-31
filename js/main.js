@@ -158,9 +158,75 @@ function initRealtimeListeners() {
 }
 
 // Map docs
+// Convierte montos guardados como número o texto (por ejemplo "$1,234.50")
+// y evita presentar una cotización sin importe como si fuera de $0.
+function leerMonto(valor) {
+  if (typeof valor === "number") {
+    return Number.isFinite(valor) && valor > 0 ? valor : null;
+  }
+  if (typeof valor !== "string" || !valor.trim()) return null;
+
+  const texto = valor.trim().replace(/[^0-9,.-]/g, "");
+  if (!texto) return null;
+  const numero = Number(texto.replace(/,/g, ""));
+  return Number.isFinite(numero) && numero > 0 ? numero : null;
+}
+
+// Suma conceptos cuando el documento no guardó un total general. Se usa para
+// recuperar cotizaciones históricas que sí tienen servicios o medicamentos.
+function calcularMontoConceptos(conceptos) {
+  if (!Array.isArray(conceptos)) return null;
+
+  let total = 0;
+  let encontroMonto = false;
+  conceptos.forEach(concepto => {
+    if (!concepto || typeof concepto !== "object") return;
+
+    const subtotal = leerMonto(
+      concepto.subtotal ?? concepto.importe ?? concepto.total ?? concepto.monto
+    );
+    if (subtotal !== null) {
+      total += subtotal;
+      encontroMonto = true;
+      return;
+    }
+
+    const precio = leerMonto(
+      concepto.precioUnitario ?? concepto.precio ?? concepto.price ??
+      concepto.costo ?? concepto.valor ?? concepto.BOLSILLO ?? concepto.bolsillo ??
+      concepto.innovador?.BOLSILLO ?? concepto.patente?.BOLSILLO
+    );
+    if (precio === null) return;
+
+    const cantidad = Number(concepto.cantidad ?? concepto.cant ?? concepto.qty ?? 1);
+    total += precio * (Number.isFinite(cantidad) && cantidad > 0 ? cantidad : 1);
+    encontroMonto = true;
+  });
+
+  return encontroMonto && total > 0 ? total : null;
+}
+
+function obtenerTotalConRespaldo(totalGuardado, ...listasDeConceptos) {
+  const totalDirecto = leerMonto(totalGuardado);
+  if (totalDirecto !== null) return totalDirecto;
+
+  let total = 0;
+  let encontroMonto = false;
+  listasDeConceptos.forEach(lista => {
+    const subtotal = calcularMontoConceptos(lista);
+    if (subtotal !== null) {
+      total += subtotal;
+      encontroMonto = true;
+    }
+  });
+  return encontroMonto ? total : null;
+}
+
 function mapSanareDoc(docSnap) {
   const data = docSnap.data();
-  const total = Number(data.total || 0);
+  const servicios = Array.isArray(data.servicios) ? data.servicios : [];
+  const medicamentos = Array.isArray(data.medicamentos) ? data.medicamentos : [];
+  const total = obtenerTotalConRespaldo(data.total, servicios, medicamentos);
 
   const telefono = data.telefono || "";
   const sede     = obtenerSedePorTelefono(telefono);
@@ -189,8 +255,8 @@ function mapSanareDoc(docSnap) {
     direccion: data.direccion || "",
     dx: data.dx || "",
     esquema: data.esquema || "",
-    servicios: Array.isArray(data.servicios) ? data.servicios : [],
-    medicamentos: Array.isArray(data.medicamentos) ? data.medicamentos : [],
+    servicios,
+    medicamentos,
     marca: "SANARE",
     status1,
     status2,
@@ -200,7 +266,8 @@ function mapSanareDoc(docSnap) {
 
 function mapNomadDoc(docSnap) {
   const data = docSnap.data();
-  const total = Number(data.total || 0);
+  const pruebas = Array.isArray(data.pruebas) ? data.pruebas : [];
+  const total = obtenerTotalConRespaldo(data.total, pruebas);
 
   const status1 = data.status1 || "Sin seguimiento";
   const status2 = data.status2 || "Sin aplicación";
@@ -225,7 +292,7 @@ function mapNomadDoc(docSnap) {
     total,
     diagnostico: data.diagnostico || "",
     marca: data.marca || "NOMAD",
-    pruebas: Array.isArray(data.pruebas) ? data.pruebas : [],
+    pruebas,
     status1,
     status2,
     motivo
@@ -234,21 +301,7 @@ function mapNomadDoc(docSnap) {
 
 function mapNuevoSanareDoc(docSnap) {
   const data = docSnap.data();
-  let total = 0;
-  if (data.total && typeof data.total === 'string') {
-    total = parseFloat(data.total.replace(/[^0-9.-]+/g, '')) || 0;
-  } else if (typeof data.total === 'number') {
-    total = data.total;
-  } else if (data.state && Array.isArray(data.state.items)) {
-    data.state.items.forEach(item => {
-      let price = 0;
-      const qty = item.qty || 1;
-      if (item.innovador && item.innovador.BOLSILLO) price = item.innovador.BOLSILLO;
-      else if (item.patente && item.patente.BOLSILLO) price = item.patente.BOLSILLO;
-      else if (item.BOLSILLO) price = item.BOLSILLO;
-      if (price) total += parseFloat(price) * qty;
-    });
-  }
+  const total = obtenerTotalConRespaldo(data.total, data.state?.items);
 
   // El estado interno del nuevo cotizador (APPROVED, PENDING_*, etc.) no es
   // una aceptación comercial. El seguimiento sólo cambia cuando un usuario
@@ -648,7 +701,7 @@ function exportarCsv(nombre, filas, detallado = false) {
     rows = filas.map(r => [
       r.marca || "", r.folio || "", r.fechaEmision || "", r.fechaCierre || "",
       r.paciente || "", r.medico || "", r.kam || "",
-      r.aseguradora || "", r.total || 0,
+      r.aseguradora || "", r.total ?? "",
       r.telefono || "", r.sede || "",
       r.status1 || "", r.status2 || "", r.motivo || ""
     ]);
@@ -666,7 +719,7 @@ function exportarCsv(nombre, filas, detallado = false) {
       r.marca || "", r.folio || "", r.fechaEmision || "", r.fechaCierre || "",
       r.fechaProgramacion || "", r.fechaValidez || "",
       r.paciente || "", r.medico || "", r.kam || "",
-      r.aseguradora || "", r.total || 0,
+      r.aseguradora || "", r.total ?? "",
       r.telefono || "", r.sede || "",
       r.direccion || "", r.dx || "", r.esquema || "",
       formatearListaParaCsv(r.servicios || []),
@@ -705,7 +758,8 @@ function exportarCsv(nombre, filas, detallado = false) {
 }
 
 function formatearMoneda(valor) {
-  const num = Number(valor || 0);
+  const num = leerMonto(valor);
+  if (num === null) return "Sin monto";
   return num.toLocaleString("es-MX", {
     style: "currency",
     currency: "MXN",
