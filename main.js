@@ -168,6 +168,19 @@ function normalizarFechaParaInput(valor) {
   return "";
 }
 
+function mensajeErrorFirestore(error) {
+  if (error?.code === "permission-denied") {
+    return "Firebase bloqueó el guardado por permisos. Actualiza las reglas de Firestore para permitir modificar fechaCierre en la colección cotizaciones.";
+  }
+  if (error?.code === "not-found") {
+    return "La cotización ya no existe en Firebase. Actualiza la página e inténtalo nuevamente.";
+  }
+  if (error?.code === "unavailable") {
+    return "No se pudo conectar con Firebase. Revisa tu conexión e inténtalo nuevamente.";
+  }
+  return `No se pudo guardar la fecha de cierre${error?.code ? ` (${error.code})` : ""}. Inténtalo nuevamente.`;
+}
+
 // Listeners tiempo real
 function initRealtimeListeners() {
   onSnapshot(collection(dbSanare, SANARE_COLLECTION), snap => {
@@ -505,7 +518,7 @@ function renderTabla(filas) {
       } catch (e) {
         console.error("Error guardando fecha de cierre:", e);
         btnGuardarFechaCierre.textContent = "Reintentar";
-        alert("No se pudo guardar la fecha de cierre. Verifica tu conexión e inténtalo nuevamente.");
+        alert(mensajeErrorFirestore(e));
       } finally {
         btnGuardarFechaCierre.disabled = false;
         window.setTimeout(() => {
