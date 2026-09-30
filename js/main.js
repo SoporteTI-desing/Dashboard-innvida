@@ -39,6 +39,15 @@ const firebaseConfigNuevoSanare = {
   appId: "1:150005004914:web:5b217c06aa13e34b9960eb"
 };
 
+const firebaseConfigPrixzNomad = {
+  apiKey: "AIzaSyDhEq8xEJuD0uCNrFzQ9YChRM36WfBYCgk",
+  authDomain: "prixz-nomad.firebaseapp.com",
+  projectId: "prixz-nomad",
+  storageBucket: "prixz-nomad.firebasestorage.app",
+  messagingSenderId: "783711568102",
+  appId: "1:783711568102:web:5aa7b9baaa64160cd1fb27"
+};
+
 // IMPORTANTE: en ambos proyectos el nombre de la colección es "cotizaciones"
 const SANARE_COLLECTION = "cotizaciones";
 const NOMAD_COLLECTION  = "cotizaciones";
@@ -47,10 +56,12 @@ const NOMAD_COLLECTION  = "cotizaciones";
 const appSanare = initializeApp(firebaseConfigSanare, "sanareApp");
 const appNomad  = initializeApp(firebaseConfigNomad, "nomadApp");
 const appNuevoSanare = initializeApp(firebaseConfigNuevoSanare, "nuevoSanareApp");
+const appPrixzNomad = initializeApp(firebaseConfigPrixzNomad, "prixzNomadApp");
 
 const dbSanare = getFirestore(appSanare);
 const dbNomad  = getFirestore(appNomad);
 const dbNuevoSanare = getFirestore(appNuevoSanare);
+const dbPrixzNomad = getFirestore(appPrixzNomad);
 
 // Estatus
 const ESTATUS_1_OPCIONES = [
@@ -86,6 +97,7 @@ function obtenerSedePorTelefono(telefono) {
 let sanareRows = [];
 let nomadRows  = [];
 let nuevoSanareRows = [];
+let prixzNomadRows = [];
 let allRows    = [];
 
 // DOM
@@ -155,6 +167,11 @@ function initRealtimeListeners() {
     nuevoSanareRows = snap.docs.map(d => mapNuevoSanareDoc(d));
     recomputeAll();
   }, err => console.error("Nuevo Sanare listener error:", err));
+
+  onSnapshot(collection(dbPrixzNomad, "solicitudes"), snap => {
+    prixzNomadRows = snap.docs.map(d => mapPrixzNomadDoc(d));
+    recomputeAll();
+  }, err => console.error("Prixz Nomad listener error:", err));
 }
 
 // Map docs
@@ -350,8 +367,52 @@ function mapNuevoSanareDoc(docSnap) {
   };
 }
 
+function mapPrixzNomadDoc(docSnap) {
+  const data = docSnap.data();
+  const items = Array.isArray(data.items) ? data.items : [];
+  let total = obtenerTotalConRespaldo(data.totalGlobal, items);
+  
+  if (total === null && items.length > 0) {
+    total = items.reduce((acc, it) => acc + (parseFloat(it.costo || it.precio || 0) || 0), 0);
+  }
+
+  const status1 = data.status1 || "Sin seguimiento";
+  const status2 = data.status2 || "Sin aplicación";
+  const motivo  = data.motivo  || "";
+
+  let fechaEmision = data.fechaCreacion || data.fechaSolicitud || "";
+  if (fechaEmision && fechaEmision.length > 10) {
+    fechaEmision = fechaEmision.substring(0, 10);
+  }
+
+  return {
+    origen: "PRIXZ_NOMAD",
+    idFirestore: docSnap.id,
+    collection: "solicitudes",
+    folio: data.folio || "",
+    fechaEmision: fechaEmision,
+    fechaCierre: data.fechaCierre || "",
+    fechaProgramacion: data.fechaProgramacion || "",
+    fechaValidez: data.fechaValidez || "",
+    createdAt: data.createdAt || "",
+    paciente: data.paciente || "",
+    medico: data.medico || "",
+    kam: data.kam || "",
+    aseguradora: data.aseguradora || "",
+    telefono: data.telefono || "",
+    sede: data.sede || data.ciudad || "",
+    total: total,
+    diagnostico: data.diagnostico || "",
+    marca: "NOMAD",
+    pruebas: items,
+    status1: status1,
+    status2: status2,
+    motivo: motivo
+  };
+}
+
 function recomputeAll() {
-  allRows = [...sanareRows, ...nomadRows, ...nuevoSanareRows];
+  allRows = [...sanareRows, ...nomadRows, ...nuevoSanareRows, ...prixzNomadRows];
   aplicarFiltrosYRender();
 }
 
@@ -453,6 +514,7 @@ function renderTabla(filas) {
         let db;
         if (row.origen === "SANARE_NUEVO") db = dbNuevoSanare;
         else if (row.origen === "SANARE") db = dbSanare;
+        else if (row.origen === "PRIXZ_NOMAD") db = dbPrixzNomad;
         else db = dbNomad;
         const ref = doc(db, row.collection, row.idFirestore);
         const cambios = {
