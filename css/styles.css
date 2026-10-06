@@ -335,6 +335,7 @@ body {
 
 .tabla input[type="text"],
 .tabla input[type="date"],
+.tabla input[type="number"],
 .tabla select {
   width: 100%;
   font-size: 0.75rem;
@@ -343,6 +344,34 @@ body {
   border: 1px solid rgba(148, 163, 184, 0.7);
   background: rgba(15, 23, 42, 0.95);
   color: #e5e7eb;
+}
+
+.tabla .input-edicion-detalle {
+  min-width: 105px;
+  border-color: rgba(96, 165, 250, 0.85);
+}
+
+.tabla .celda-edicion-detalle {
+  cursor: text;
+}
+
+.tabla .celda-edicion-detalle:hover,
+.tabla .celda-edicion-detalle:focus {
+  background: rgba(59, 130, 246, 0.13);
+  outline: none;
+}
+
+.tabla .input-edicion-detalle:focus {
+  outline: 2px solid rgba(96, 165, 250, 0.45);
+  outline-offset: 1px;
+}
+
+.tabla .input-edicion-detalle.guardando {
+  opacity: 0.6;
+}
+
+.tabla .input-edicion-detalle.guardado {
+  border-color: #4ade80;
 }
 
 .panel-graficos .charts-grid {
