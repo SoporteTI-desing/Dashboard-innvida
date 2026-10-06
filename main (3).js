@@ -39,15 +39,6 @@ const firebaseConfigNuevoSanare = {
   appId: "1:150005004914:web:5b217c06aa13e34b9960eb"
 };
 
-const firebaseConfigPrixzNomad = {
-  apiKey: "AIzaSyDhEq8xEJuD0uCNrFzQ9YChRM36WfBYCgk",
-  authDomain: "prixz-nomad.firebaseapp.com",
-  projectId: "prixz-nomad",
-  storageBucket: "prixz-nomad.firebasestorage.app",
-  messagingSenderId: "783711568102",
-  appId: "1:783711568102:web:5aa7b9baaa64160cd1fb27"
-};
-
 // IMPORTANTE: en ambos proyectos el nombre de la colección es "cotizaciones"
 const SANARE_COLLECTION = "cotizaciones";
 const NOMAD_COLLECTION  = "cotizaciones";
@@ -56,12 +47,10 @@ const NOMAD_COLLECTION  = "cotizaciones";
 const appSanare = initializeApp(firebaseConfigSanare, "sanareApp");
 const appNomad  = initializeApp(firebaseConfigNomad, "nomadApp");
 const appNuevoSanare = initializeApp(firebaseConfigNuevoSanare, "nuevoSanareApp");
-const appPrixzNomad = initializeApp(firebaseConfigPrixzNomad, "prixzNomadApp");
 
 const dbSanare = getFirestore(appSanare);
 const dbNomad  = getFirestore(appNomad);
 const dbNuevoSanare = getFirestore(appNuevoSanare);
-const dbPrixzNomad = getFirestore(appPrixzNomad);
 
 // Estatus
 const ESTATUS_1_OPCIONES = [
@@ -97,7 +86,6 @@ function obtenerSedePorTelefono(telefono) {
 let sanareRows = [];
 let nomadRows  = [];
 let nuevoSanareRows = [];
-let prixzNomadRows = [];
 let allRows    = [];
 
 // DOM
@@ -127,10 +115,6 @@ function puedeEditarEstatus() {
   return window.INNVIDA_DASHBOARD_ROLE !== "limited";
 }
 
-function puedeEditarDetalleCompleto() {
-  return window.INNVIDA_DASHBOARD_ROLE === "detail-editor";
-}
-
 // Init selects de estatus
 function initStatusFilters() {
   ESTATUS_1_OPCIONES.forEach(op => {
@@ -155,6 +139,48 @@ function getSelectedValues(selectElem) {
   return values;
 }
 
+// Los campos <input type="date"> sólo aceptan fechas ISO (aaaa-mm-dd). Las
+// cotizaciones históricas pueden traer la fecha como dd/mm/aaaa, Date o
+// Timestamp de Firestore, por lo que la normalizamos antes de mostrarla.
+function normalizarFechaParaInput(valor) {
+  if (!valor) return "";
+
+  if (typeof valor.toDate === "function") {
+    return normalizarFechaParaInput(valor.toDate());
+  }
+
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    const anio = valor.getFullYear();
+    const mes = String(valor.getMonth() + 1).padStart(2, "0");
+    const dia = String(valor.getDate()).padStart(2, "0");
+    return `${anio}-${mes}-${dia}`;
+  }
+
+  const texto = String(valor).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(texto)) return texto;
+
+  const fechaLatina = texto.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (fechaLatina) {
+    const [, dia, mes, anio] = fechaLatina;
+    return `${anio}-${mes.padStart(2, "0")}-${dia.padStart(2, "0")}`;
+  }
+
+  return "";
+}
+
+function mensajeErrorFirestore(error) {
+  if (error?.code === "permission-denied") {
+    return "Firebase bloqueó el guardado por permisos. Actualiza las reglas de Firestore para permitir modificar fechaCierre en la colección cotizaciones.";
+  }
+  if (error?.code === "not-found") {
+    return "La cotización ya no existe en Firebase. Actualiza la página e inténtalo nuevamente.";
+  }
+  if (error?.code === "unavailable") {
+    return "No se pudo conectar con Firebase. Revisa tu conexión e inténtalo nuevamente.";
+  }
+  return `No se pudo guardar la fecha de cierre${error?.code ? ` (${error.code})` : ""}. Inténtalo nuevamente.`;
+}
+
 // Listeners tiempo real
 function initRealtimeListeners() {
   onSnapshot(collection(dbSanare, SANARE_COLLECTION), snap => {
@@ -171,11 +197,6 @@ function initRealtimeListeners() {
     nuevoSanareRows = snap.docs.map(d => mapNuevoSanareDoc(d));
     recomputeAll();
   }, err => console.error("Nuevo Sanare listener error:", err));
-
-  onSnapshot(collection(dbPrixzNomad, "solicitudes"), snap => {
-    prixzNomadRows = snap.docs.map(d => mapPrixzNomadDoc(d));
-    recomputeAll();
-  }, err => console.error("Prixz Nomad listener error:", err));
 }
 
 // Map docs
@@ -250,7 +271,7 @@ function mapSanareDoc(docSnap) {
   const total = obtenerTotalConRespaldo(data.total, servicios, medicamentos);
 
   const telefono = data.telefono || "";
-  const sede     = data.sede || obtenerSedePorTelefono(telefono);
+  const sede     = obtenerSedePorTelefono(telefono);
 
   const status1 = data.status1 || "Sin seguimiento";
   const status2 = data.status2 || "Sin aplicación";
@@ -371,52 +392,8 @@ function mapNuevoSanareDoc(docSnap) {
   };
 }
 
-function mapPrixzNomadDoc(docSnap) {
-  const data = docSnap.data();
-  const items = Array.isArray(data.items) ? data.items : [];
-  let total = obtenerTotalConRespaldo(data.totalGlobal, items);
-  
-  if (total === null && items.length > 0) {
-    total = items.reduce((acc, it) => acc + (parseFloat(it.costo || it.precio || 0) || 0), 0);
-  }
-
-  const status1 = data.status1 || "Sin seguimiento";
-  const status2 = data.status2 || "Sin aplicación";
-  const motivo  = data.motivo  || "";
-
-  let fechaEmision = data.fechaCreacion || data.fechaSolicitud || "";
-  if (fechaEmision && fechaEmision.length > 10) {
-    fechaEmision = fechaEmision.substring(0, 10);
-  }
-
-  return {
-    origen: "PRIXZ_NOMAD",
-    idFirestore: docSnap.id,
-    collection: "solicitudes",
-    folio: data.folio || "",
-    fechaEmision: fechaEmision,
-    fechaCierre: data.fechaCierre || "",
-    fechaProgramacion: data.fechaProgramacion || "",
-    fechaValidez: data.fechaValidez || "",
-    createdAt: data.createdAt || "",
-    paciente: data.paciente || "",
-    medico: data.medico || "",
-    kam: data.kam || "",
-    aseguradora: data.aseguradora || "",
-    telefono: data.telefono || "",
-    sede: data.sede || data.ciudad || "",
-    total: total,
-    diagnostico: data.diagnostico || "",
-    marca: "NOMAD",
-    pruebas: items,
-    status1: status1,
-    status2: status2,
-    motivo: motivo
-  };
-}
-
 function recomputeAll() {
-  allRows = [...sanareRows, ...nomadRows, ...nuevoSanareRows, ...prixzNomadRows];
+  allRows = [...sanareRows, ...nomadRows, ...nuevoSanareRows];
   aplicarFiltrosYRender();
 }
 
@@ -463,105 +440,31 @@ function renderTabla(filas) {
     tr.dataset.marca = row.marca;
     tr.dataset.collection = row.collection;
 
-    const obtenerBaseDeDatos = () => {
-      if (row.origen === "SANARE_NUEVO") return dbNuevoSanare;
-      if (row.origen === "SANARE") return dbSanare;
-      if (row.origen === "PRIXZ_NOMAD") return dbPrixzNomad;
-      return dbNomad;
-    };
-
-    // Nuevo Sanaré conserva paciente, médico y sede dentro de form. Los demás
-    // orígenes guardan los datos directamente en el documento.
-    const campoFirestore = campo => {
-      if (row.origen === "SANARE_NUEVO" && ["paciente", "medico", "sede"].includes(campo)) {
-        return `form.${campo}`;
-      }
-      return campo;
-    };
-
-    const guardarCampo = async (campo, valor, control) => {
-      const campoRemoto = campoFirestore(campo);
-      const anterior = row[campo];
-      control.disabled = true;
-      control.classList.add("guardando");
-      try {
-        await updateDoc(doc(obtenerBaseDeDatos(), row.collection, row.idFirestore), {
-          [campoRemoto]: valor
-        });
-        row[campo] = valor;
-        control.classList.add("guardado");
-      } catch (e) {
-        console.error(`Error guardando ${campo}:`, e);
-        row[campo] = anterior;
-        alert("No se pudo guardar el cambio en Firebase. Revisa tus permisos y vuelve a intentarlo.");
-      } finally {
-        control.disabled = false;
-        control.classList.remove("guardando");
-        window.setTimeout(() => control.classList.remove("guardado"), 1400);
-      }
-    };
-
-    const crearCeldaTexto = (campo, valor, opciones = {}) => {
-      const td = document.createElement("td");
-      if (!puedeEditarDetalleCompleto()) {
-        td.textContent = opciones.formatear ? opciones.formatear(valor) : (valor ?? "");
-        if (opciones.alinearDerecha) td.style.textAlign = "right";
-        return td;
-      }
-      const input = document.createElement("input");
-      input.type = opciones.tipo || "text";
-      input.value = valor ?? "";
-      if (opciones.step) input.step = opciones.step;
-      if (opciones.min !== undefined) input.min = opciones.min;
-      input.className = "input-edicion-detalle";
-      input.title = "Se guarda al salir del campo o al presionar Enter";
-      input.setAttribute("aria-label", `${campo} de ${row.folio || "cotización"}`);
-      const valorParaGuardar = () => {
-        if (opciones.tipo === "number") {
-          if (input.value.trim() === "") return undefined;
-          const numero = Number(input.value);
-          return Number.isFinite(numero) && numero >= 0 ? numero : undefined;
-        }
-        return input.value.trim();
-      };
-      const guardarSiCambio = () => {
-        const valorNuevo = valorParaGuardar();
-        if (valorNuevo === undefined) {
-          input.value = row[campo] ?? "";
-          alert("El total debe ser un número mayor o igual a cero.");
-          return;
-        }
-        if (valorNuevo !== row[campo]) guardarCampo(campo, valorNuevo, input);
-      };
-      input.addEventListener("blur", guardarSiCambio);
-      input.addEventListener("keydown", e => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          input.blur();
-        }
-      });
-      td.appendChild(input);
-      return td;
-    };
-
     const tdMarca   = document.createElement("td"); tdMarca.textContent = row.marca;
-    const tdFolio   = crearCeldaTexto("folio", row.folio);
+    const tdFolio   = document.createElement("td"); tdFolio.textContent = row.folio;
     const tdFecha   = document.createElement("td"); tdFecha.textContent = row.fechaEmision || "";
 
     const tdFechaCierre = document.createElement("td");
     const inpFechaCierre = document.createElement("input");
     inpFechaCierre.type = "date";
-    inpFechaCierre.value = row.fechaCierre || "";
+    inpFechaCierre.value = normalizarFechaParaInput(row.fechaCierre);
     inpFechaCierre.title = "Fecha de cierre";
+    inpFechaCierre.setAttribute("aria-label", `Fecha de cierre de ${row.folio || "cotización"}`);
+    const btnGuardarFechaCierre = document.createElement("button");
+    btnGuardarFechaCierre.type = "button";
+    btnGuardarFechaCierre.className = "btn-guardar-fecha";
+    btnGuardarFechaCierre.textContent = "Guardar";
+    btnGuardarFechaCierre.title = "Guardar fecha de cierre";
     tdFechaCierre.appendChild(inpFechaCierre);
+    tdFechaCierre.appendChild(btnGuardarFechaCierre);
 
-    const tdPac     = crearCeldaTexto("paciente", row.paciente);
-    const tdMed     = crearCeldaTexto("medico", row.medico);
-    const tdKam     = crearCeldaTexto("kam", row.kam);
-    const tdAseg    = crearCeldaTexto("aseguradora", row.aseguradora);
-    const tdTotal   = crearCeldaTexto("total", row.total, { tipo: "number", step: "0.01", min: "0", formatear: formatearMoneda, alinearDerecha: true });
-    const tdTel     = crearCeldaTexto("telefono", row.telefono);
-    const tdSede    = crearCeldaTexto("sede", row.sede);
+    const tdPac     = document.createElement("td"); tdPac.textContent = row.paciente || "";
+    const tdMed     = document.createElement("td"); tdMed.textContent = row.medico || "";
+    const tdKam     = document.createElement("td"); tdKam.textContent = row.kam || "";
+    const tdAseg    = document.createElement("td"); tdAseg.textContent = row.aseguradora || "";
+    const tdTotal   = document.createElement("td"); tdTotal.textContent = formatearMoneda(row.total); tdTotal.style.textAlign = "right";
+    const tdTel     = document.createElement("td"); tdTel.textContent = row.telefono || "";
+    const tdSede    = document.createElement("td"); tdSede.textContent = row.sede || "";
 
     const tdStatus1 = document.createElement("td");
     const sel1 = document.createElement("select");
@@ -594,33 +497,67 @@ function renderTabla(filas) {
     inpMotivo.placeholder = "Motivo / comentario...";
     tdMotivo.appendChild(inpMotivo);
 
-    const guardarSeguimiento = async () => {
-      const cambios = { motivo: inpMotivo.value, fechaCierre: inpFechaCierre.value || "" };
-      if (puedeEditarEstatus()) {
-        cambios.status1 = sel1.value;
-        cambios.status2 = sel2.value;
-      }
+    const obtenerBaseDeDatos = () => {
+      if (row.origen === "SANARE_NUEVO") return dbNuevoSanare;
+      if (row.origen === "SANARE") return dbSanare;
+      return dbNomad;
+    };
+
+    const guardarFechaCierre = async () => {
+      const fechaCierre = inpFechaCierre.value;
+      btnGuardarFechaCierre.disabled = true;
+      btnGuardarFechaCierre.textContent = "Guardando...";
+
       try {
-        await updateDoc(doc(obtenerBaseDeDatos(), row.collection, row.idFirestore), cambios);
+        const ref = doc(obtenerBaseDeDatos(), row.collection, row.idFirestore);
+        // Se actualiza únicamente este campo para no sobrescribir cambios que
+        // otra persona haya hecho en estatus o comentarios.
+        await updateDoc(ref, { fechaCierre });
+        row.fechaCierre = fechaCierre;
+        btnGuardarFechaCierre.textContent = "Guardado";
       } catch (e) {
-        console.error("Error actualizando seguimiento:", e);
-        alert("No se pudo guardar el cambio en Firebase. Revisa tus permisos y vuelve a intentarlo.");
+        console.error("Error guardando fecha de cierre:", e);
+        btnGuardarFechaCierre.textContent = "Reintentar";
+        alert(mensajeErrorFirestore(e));
+      } finally {
+        btnGuardarFechaCierre.disabled = false;
+        window.setTimeout(() => {
+          if (!btnGuardarFechaCierre.disabled) btnGuardarFechaCierre.textContent = "Guardar";
+        }, 1800);
       }
     };
 
-    // La fecha de cierre se registra de forma independiente: poner una fecha
-    // nunca debe aceptar/cerrar una cotización automáticamente.
-    inpFechaCierre.addEventListener("change", guardarSeguimiento);
+    const guardar = async () => {
+      try {
+        const ref = doc(obtenerBaseDeDatos(), row.collection, row.idFirestore);
+        const cambios = {
+          motivo: inpMotivo.value
+        };
+        if (puedeEditarEstatus()) {
+          cambios.status1 = sel1.value;
+          cambios.status2 = sel2.value;
+        }
+        await updateDoc(ref, cambios);
+      } catch (e) {
+        console.error("Error actualizando seguimiento:", e);
+        alert("No se pudo guardar en Firebase. Revisa consola.");
+      }
+    };
+
+    // La fecha se puede guardar al seleccionarla o mediante el botón explícito.
+    // Nunca modifica el estatus comercial de la cotización.
+    inpFechaCierre.addEventListener("change", guardarFechaCierre);
+    btnGuardarFechaCierre.addEventListener("click", guardarFechaCierre);
 
     if (puedeEditarEstatus()) {
-      sel1.addEventListener("change", guardarSeguimiento);
-      sel2.addEventListener("change", guardarSeguimiento);
+      sel1.addEventListener("change", guardar);
+      sel2.addEventListener("change", guardar);
     }
-    inpMotivo.addEventListener("blur", guardarSeguimiento);
+    inpMotivo.addEventListener("blur", guardar);
     inpMotivo.addEventListener("keydown", e => {
       if (e.key === "Enter") {
         e.preventDefault();
-        guardarSeguimiento();
+        guardar();
       }
     });
 
