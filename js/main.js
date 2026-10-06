@@ -127,6 +127,10 @@ function puedeEditarEstatus() {
   return window.INNVIDA_DASHBOARD_ROLE !== "limited";
 }
 
+function puedeEditarDetalleCompleto() {
+  return window.INNVIDA_DASHBOARD_ROLE === "detail-editor";
+}
+
 // Init selects de estatus
 function initStatusFilters() {
   ESTATUS_1_OPCIONES.forEach(op => {
@@ -246,7 +250,7 @@ function mapSanareDoc(docSnap) {
   const total = obtenerTotalConRespaldo(data.total, servicios, medicamentos);
 
   const telefono = data.telefono || "";
-  const sede     = obtenerSedePorTelefono(telefono);
+  const sede     = data.sede || obtenerSedePorTelefono(telefono);
 
   const status1 = data.status1 || "Sin seguimiento";
   const status2 = data.status2 || "Sin aplicación";
@@ -459,8 +463,89 @@ function renderTabla(filas) {
     tr.dataset.marca = row.marca;
     tr.dataset.collection = row.collection;
 
+    const obtenerBaseDeDatos = () => {
+      if (row.origen === "SANARE_NUEVO") return dbNuevoSanare;
+      if (row.origen === "SANARE") return dbSanare;
+      if (row.origen === "PRIXZ_NOMAD") return dbPrixzNomad;
+      return dbNomad;
+    };
+
+    // Nuevo Sanaré conserva paciente, médico y sede dentro de form. Los demás
+    // orígenes guardan los datos directamente en el documento.
+    const campoFirestore = campo => {
+      if (row.origen === "SANARE_NUEVO" && ["paciente", "medico", "sede"].includes(campo)) {
+        return `form.${campo}`;
+      }
+      return campo;
+    };
+
+    const guardarCampo = async (campo, valor, control) => {
+      const campoRemoto = campoFirestore(campo);
+      const anterior = row[campo];
+      control.disabled = true;
+      control.classList.add("guardando");
+      try {
+        await updateDoc(doc(obtenerBaseDeDatos(), row.collection, row.idFirestore), {
+          [campoRemoto]: valor
+        });
+        row[campo] = valor;
+        control.classList.add("guardado");
+      } catch (e) {
+        console.error(`Error guardando ${campo}:`, e);
+        row[campo] = anterior;
+        alert("No se pudo guardar el cambio en Firebase. Revisa tus permisos y vuelve a intentarlo.");
+      } finally {
+        control.disabled = false;
+        control.classList.remove("guardando");
+        window.setTimeout(() => control.classList.remove("guardado"), 1400);
+      }
+    };
+
+    const crearCeldaTexto = (campo, valor, opciones = {}) => {
+      const td = document.createElement("td");
+      if (!puedeEditarDetalleCompleto()) {
+        td.textContent = opciones.formatear ? opciones.formatear(valor) : (valor ?? "");
+        if (opciones.alinearDerecha) td.style.textAlign = "right";
+        return td;
+      }
+      const input = document.createElement("input");
+      input.type = opciones.tipo || "text";
+      input.value = valor ?? "";
+      if (opciones.step) input.step = opciones.step;
+      if (opciones.min !== undefined) input.min = opciones.min;
+      input.className = "input-edicion-detalle";
+      input.title = "Se guarda al salir del campo o al presionar Enter";
+      input.setAttribute("aria-label", `${campo} de ${row.folio || "cotización"}`);
+      const valorParaGuardar = () => {
+        if (opciones.tipo === "number") {
+          if (input.value.trim() === "") return undefined;
+          const numero = Number(input.value);
+          return Number.isFinite(numero) && numero >= 0 ? numero : undefined;
+        }
+        return input.value.trim();
+      };
+      const guardarSiCambio = () => {
+        const valorNuevo = valorParaGuardar();
+        if (valorNuevo === undefined) {
+          input.value = row[campo] ?? "";
+          alert("El total debe ser un número mayor o igual a cero.");
+          return;
+        }
+        if (valorNuevo !== row[campo]) guardarCampo(campo, valorNuevo, input);
+      };
+      input.addEventListener("blur", guardarSiCambio);
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          input.blur();
+        }
+      });
+      td.appendChild(input);
+      return td;
+    };
+
     const tdMarca   = document.createElement("td"); tdMarca.textContent = row.marca;
-    const tdFolio   = document.createElement("td"); tdFolio.textContent = row.folio;
+    const tdFolio   = crearCeldaTexto("folio", row.folio);
     const tdFecha   = document.createElement("td"); tdFecha.textContent = row.fechaEmision || "";
 
     const tdFechaCierre = document.createElement("td");
@@ -470,13 +555,13 @@ function renderTabla(filas) {
     inpFechaCierre.title = "Fecha de cierre";
     tdFechaCierre.appendChild(inpFechaCierre);
 
-    const tdPac     = document.createElement("td"); tdPac.textContent = row.paciente || "";
-    const tdMed     = document.createElement("td"); tdMed.textContent = row.medico || "";
-    const tdKam     = document.createElement("td"); tdKam.textContent = row.kam || "";
-    const tdAseg    = document.createElement("td"); tdAseg.textContent = row.aseguradora || "";
-    const tdTotal   = document.createElement("td"); tdTotal.textContent = formatearMoneda(row.total); tdTotal.style.textAlign = "right";
-    const tdTel     = document.createElement("td"); tdTel.textContent = row.telefono || "";
-    const tdSede    = document.createElement("td"); tdSede.textContent = row.sede || "";
+    const tdPac     = crearCeldaTexto("paciente", row.paciente);
+    const tdMed     = crearCeldaTexto("medico", row.medico);
+    const tdKam     = crearCeldaTexto("kam", row.kam);
+    const tdAseg    = crearCeldaTexto("aseguradora", row.aseguradora);
+    const tdTotal   = crearCeldaTexto("total", row.total, { tipo: "number", step: "0.01", min: "0", formatear: formatearMoneda, alinearDerecha: true });
+    const tdTel     = crearCeldaTexto("telefono", row.telefono);
+    const tdSede    = crearCeldaTexto("sede", row.sede);
 
     const tdStatus1 = document.createElement("td");
     const sel1 = document.createElement("select");
@@ -509,42 +594,33 @@ function renderTabla(filas) {
     inpMotivo.placeholder = "Motivo / comentario...";
     tdMotivo.appendChild(inpMotivo);
 
-    const guardar = async () => {
+    const guardarSeguimiento = async () => {
+      const cambios = { motivo: inpMotivo.value, fechaCierre: inpFechaCierre.value || "" };
+      if (puedeEditarEstatus()) {
+        cambios.status1 = sel1.value;
+        cambios.status2 = sel2.value;
+      }
       try {
-        let db;
-        if (row.origen === "SANARE_NUEVO") db = dbNuevoSanare;
-        else if (row.origen === "SANARE") db = dbSanare;
-        else if (row.origen === "PRIXZ_NOMAD") db = dbPrixzNomad;
-        else db = dbNomad;
-        const ref = doc(db, row.collection, row.idFirestore);
-        const cambios = {
-          motivo:  inpMotivo.value,
-          fechaCierre: inpFechaCierre.value || ""
-        };
-        if (puedeEditarEstatus()) {
-          cambios.status1 = sel1.value;
-          cambios.status2 = sel2.value;
-        }
-        await updateDoc(ref, cambios);
+        await updateDoc(doc(obtenerBaseDeDatos(), row.collection, row.idFirestore), cambios);
       } catch (e) {
         console.error("Error actualizando seguimiento:", e);
-        alert("No se pudo guardar en Firebase. Revisa consola.");
+        alert("No se pudo guardar el cambio en Firebase. Revisa tus permisos y vuelve a intentarlo.");
       }
     };
 
     // La fecha de cierre se registra de forma independiente: poner una fecha
     // nunca debe aceptar/cerrar una cotización automáticamente.
-    inpFechaCierre.addEventListener("change", guardar);
+    inpFechaCierre.addEventListener("change", guardarSeguimiento);
 
     if (puedeEditarEstatus()) {
-      sel1.addEventListener("change", guardar);
-      sel2.addEventListener("change", guardar);
+      sel1.addEventListener("change", guardarSeguimiento);
+      sel2.addEventListener("change", guardarSeguimiento);
     }
-    inpMotivo.addEventListener("blur", guardar);
+    inpMotivo.addEventListener("blur", guardarSeguimiento);
     inpMotivo.addEventListener("keydown", e => {
       if (e.key === "Enter") {
         e.preventDefault();
-        guardar();
+        guardarSeguimiento();
       }
     });
 
