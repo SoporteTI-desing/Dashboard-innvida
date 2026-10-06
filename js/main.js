@@ -490,10 +490,12 @@ function renderTabla(filas) {
         });
         row[campo] = valor;
         control.classList.add("guardado");
+        return true;
       } catch (e) {
         console.error(`Error guardando ${campo}:`, e);
         row[campo] = anterior;
         alert("No se pudo guardar el cambio en Firebase. Revisa tus permisos y vuelve a intentarlo.");
+        return false;
       } finally {
         control.disabled = false;
         control.classList.remove("guardando");
@@ -503,44 +505,76 @@ function renderTabla(filas) {
 
     const crearCeldaTexto = (campo, valor, opciones = {}) => {
       const td = document.createElement("td");
+      const textoVisible = valorActual => opciones.formatear
+        ? opciones.formatear(valorActual)
+        : (valorActual ?? "");
       if (!puedeEditarDetalleCompleto()) {
-        td.textContent = opciones.formatear ? opciones.formatear(valor) : (valor ?? "");
+        td.textContent = textoVisible(valor);
         if (opciones.alinearDerecha) td.style.textAlign = "right";
         return td;
       }
-      const input = document.createElement("input");
-      input.type = opciones.tipo || "text";
-      input.value = valor ?? "";
-      if (opciones.step) input.step = opciones.step;
-      if (opciones.min !== undefined) input.min = opciones.min;
-      input.className = "input-edicion-detalle";
-      input.title = "Se guarda al salir del campo o al presionar Enter";
-      input.setAttribute("aria-label", `${campo} de ${row.folio || "cotización"}`);
-      const valorParaGuardar = () => {
-        if (opciones.tipo === "number") {
-          if (input.value.trim() === "") return undefined;
-          const numero = Number(input.value);
-          return Number.isFinite(numero) && numero >= 0 ? numero : undefined;
-        }
-        return input.value.trim();
+
+      td.className = "celda-edicion-detalle";
+      td.title = "Haz clic para editar";
+      td.tabIndex = 0;
+      if (opciones.alinearDerecha) td.style.textAlign = "right";
+      td.textContent = textoVisible(valor);
+
+      const abrirEditor = () => {
+        if (td.querySelector("input")) return;
+        const input = document.createElement("input");
+        input.type = opciones.tipo || "text";
+        input.value = row[campo] ?? "";
+        if (opciones.step) input.step = opciones.step;
+        if (opciones.min !== undefined) input.min = opciones.min;
+        input.className = "input-edicion-detalle";
+        input.setAttribute("aria-label", `${campo} de ${row.folio || "cotización"}`);
+        td.textContent = "";
+        td.appendChild(input);
+        input.focus();
+        input.select();
+
+        let cerrado = false;
+        const restaurarTexto = () => {
+          td.textContent = textoVisible(row[campo]);
+        };
+        const guardarYcerrar = async () => {
+          if (cerrado) return;
+          cerrado = true;
+          let valorNuevo;
+          if (opciones.tipo === "number") {
+            const numero = Number(input.value);
+            if (input.value.trim() === "" || !Number.isFinite(numero) || numero < 0) {
+              alert("El total debe ser un número mayor o igual a cero.");
+              restaurarTexto();
+              return;
+            }
+            valorNuevo = numero;
+          } else {
+            valorNuevo = input.value.trim();
+          }
+          if (valorNuevo !== row[campo]) await guardarCampo(campo, valorNuevo, input);
+          restaurarTexto();
+        };
+        input.addEventListener("blur", guardarYcerrar);
+        input.addEventListener("keydown", e => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            guardarYcerrar();
+          }
+          if (e.key === "Escape") {
+            cerrado = true;
+            restaurarTexto();
+          }
+        });
       };
-      const guardarSiCambio = () => {
-        const valorNuevo = valorParaGuardar();
-        if (valorNuevo === undefined) {
-          input.value = row[campo] ?? "";
-          alert("El total debe ser un número mayor o igual a cero.");
-          return;
-        }
-        if (valorNuevo !== row[campo]) guardarCampo(campo, valorNuevo, input);
-      };
-      input.addEventListener("blur", guardarSiCambio);
-      input.addEventListener("keydown", e => {
-        if (e.key === "Enter") {
+      td.addEventListener("click", abrirEditor);
+      td.addEventListener("keydown", e => {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          input.blur();
+          abrirEditor();
         }
       });
-      td.appendChild(input);
       return td;
     };
 
