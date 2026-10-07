@@ -355,8 +355,12 @@ function mapNuevoSanareDoc(docSnap) {
     paciente: paciente,
     medico: medico,
     kam: data.kam || "",
-    aseguradora: "",
-    telefono: "",
+    // Estos campos también se pueden completar desde el dashboard por el
+    // perfil jefecito. Deben leerse del documento al llegar el snapshot; de
+    // otro modo Firebase los guarda, pero la tabla los volvería a mostrar
+    // vacíos después de cada actualización.
+    aseguradora: data.aseguradora || "",
+    telefono: data.telefono || "",
     sede: sede,
     total: total,
     direccion: "",
