@@ -1087,7 +1087,6 @@ function actualizarResumenNomad() {
   const share = n => m.actual.length ? pct(n/m.actual.length*100) : "—";
   set("nomadPago", "Bolsillo "+share(m.payment.bolsillo)+" · Aseguradora "+share(m.payment.aseguradora),"Sin clasificar: "+share(m.payment.sinClasificar)+" · Base: "+m.actual.length+" cotizaciones");
   set("nomadComparacion",m.growth === null ? (m.total ? "Sin base comparable" : "Sin movimiento") : (m.growth>0?"+":"")+pct(m.growth),"Actual: "+formatearMoneda(m.total)+" · Anterior al día "+m.cutoff+": "+formatearMoneda(m.previous));
-  document.getElementById("nomadAnalisis").textContent = "El monto del mes "+(m.delta>0?"aumentó ":m.delta<0?"disminuyó ":"no cambió: ")+formatearMoneda(Math.abs(m.delta))+" frente al mismo corte del mes anterior. Cotizaciones: "+m.actual.length+" vs. "+m.anterior.length+". Ticket promedio: "+formatearMoneda(m.ticket)+" vs. "+formatearMoneda(m.previousTicket)+". Total del mes anterior completo: "+formatearMoneda(m.previousFull)+".";
 }
 // Actualizar el período si el dashboard permanece abierto al cambiar de día.
 setInterval(actualizarResumenNomad, 60000);
