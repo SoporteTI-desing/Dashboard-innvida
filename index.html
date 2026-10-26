@@ -88,7 +88,7 @@
       </div>
     </section>
 
-    <section class="panel panel-resumen">
+    <section class="panel panel-resumen" id="resumenGeneral">
       <h2>Resumen</h2>
       <div class="cards-grid">
         <article class="card">
@@ -115,6 +115,14 @@
           <p class="card-subtitle">Global / cotización</p>
         </article>
       </div>
+    </section>
+
+<section class="panel" id="resumenNomad" hidden>
+      <h2>NOMAD · indicadores del mes</h2>
+      <p id="nomadPeriodo" class="card-subtitle"></p>
+      <div class="cards-grid"><article class="card"><h3>Monto del mes</h3><p class="card-total" id="nomadMonto">—</p><p class="card-subtitle" id="nomadMontoDetalle"></p></article><article class="card"><h3>Ticket promedio</h3><p class="card-total" id="nomadTicket">—</p><p class="card-subtitle" id="nomadTicketDetalle"></p></article><article class="card"><h3>KAM líder · monto cerrado</h3><p class="card-total" id="nomadKam">—</p><p class="card-subtitle" id="nomadKamDetalle"></p></article><article class="card"><h3>Aseguradora más frecuente</h3><p class="card-total" id="nomadAseguradora">—</p><p class="card-subtitle" id="nomadAseguradoraDetalle"></p></article><article class="card"><h3>Origen del pago</h3><p class="card-total" id="nomadPago">—</p><p class="card-subtitle" id="nomadPagoDetalle"></p></article><article class="card"><h3>Mes actual vs. anterior</h3><p class="card-total" id="nomadComparacion">—</p><p class="card-subtitle" id="nomadComparacionDetalle"></p></article></div>
+      <p id="nomadAnalisis"></p>
+      <p class="card-subtitle">Base: cotizaciones vigentes por fecha de emisión; se excluyen perdidas, canceladas y no aplicadas/vencidas. Los porcentajes de pago representan número de cotizaciones, no importes cobrados. Los datos sin aseguradora se muestran como sin clasificar. Estos indicadores usan el mes calendario actual y conservan los filtros de búsqueda y estatus; el rango de fechas se aplica a la tabla y gráficos.</p>
     </section>
 
     <section class="panel panel-tabla">

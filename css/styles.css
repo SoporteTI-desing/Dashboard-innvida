@@ -522,3 +522,7 @@ body {
 }
 
 /* Reuse existing .btn styles for login button */
+
+[hidden] { display: none !important; }
+#resumenNomad .card-total { font-size: clamp(1.1rem, 2vw, 1.65rem); overflow-wrap: anywhere; }
+#nomadAnalisis { line-height: 1.6; }

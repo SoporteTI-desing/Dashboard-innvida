@@ -454,6 +454,7 @@ function aplicarFiltrosYRender() {
   if (st1.length) filas = filas.filter(r => st1.includes(r.status1));
   if (st2.length) filas = filas.filter(r => st2.includes(r.status2));
 
+  actualizarResumenNomad();
   renderTabla(filas);
   actualizarTotales(filas);
   actualizarGraficos(filas);
@@ -1011,3 +1012,82 @@ function init() {
 }
 
 document.addEventListener("DOMContentLoaded", init);
+
+// Indicadores mensuales independientes del rango de fechas de la tabla.
+function normalizarNomad(value) {
+  return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+function tipoPagoNomad(value) {
+  const text = normalizarNomad(value);
+  if (!text || ["sin aseguradora", "sin dato", "sin datos", "n/a", "na", "—", "-"].includes(text)) return "sinClasificar";
+  if (text.includes("bolsillo") || ["particular", "pago particular", "paciente", "efectivo", "pago de contado"].includes(text)) return "bolsillo";
+  return "aseguradora";
+}
+function calcularResumenNomad(rows, now = new Date()) {
+  const year = now.getFullYear(), month = now.getMonth(), day = now.getDate();
+  const key = (y,m) => new Date(y,m,1).getFullYear() + "-" + String(new Date(y,m,1).getMonth()+1).padStart(2,"0");
+  const actualKey = key(year,month), anteriorKey = key(year,month-1);
+  const lastPreviousDay = new Date(year,month,0).getDate();
+  const cutoff = Math.min(day,lastPreviousDay);
+  const valid = rows.filter(r => r.marca === "NOMAD" && !esExcluidaDeResumenGlobal(r));
+  const inMonth = (r,k,limit) => {
+    const date = String(r.fechaEmision || "").slice(0,10);
+    const n = Number(date.slice(8,10));
+    const maxDay = new Date(Number(k.slice(0,4)),Number(k.slice(5,7)),0).getDate();
+    return /^\d{4}-\d{2}-\d{2}$/.test(date) && date.slice(0,7) === k && n >= 1 && n <= Math.min(limit,maxDay);
+  };
+  const actual = valid.filter(r => inMonth(r,actualKey,day));
+  const anterior = valid.filter(r => inMonth(r,anteriorKey,cutoff));
+  const anteriorCompleto = valid.filter(r => inMonth(r,anteriorKey,lastPreviousDay));
+  const amount = r => Number.isFinite(Number(r.total)) ? Number(r.total) : 0;
+  const sum = list => list.reduce((a,r)=>a+amount(r),0);
+  const total = sum(actual), previous = sum(anterior);
+  const kams = new Map(), insurers = new Map();
+  const payment = { bolsillo:0, aseguradora:0, sinClasificar:0 };
+  const add = (map,name,value) => {
+    const k = normalizarNomad(name);
+    if (!k) return;
+    const entry = map.get(k) || {name:String(name).trim(),value:0};
+    entry.value += value; map.set(k,entry);
+  };
+  actual.forEach(r => {
+    if (["cerrada", "cerrada / aceptada"].includes(normalizarNomad(r.status1))) add(kams,r.kam,amount(r));
+    const type = tipoPagoNomad(r.aseguradora); payment[type]++;
+    if (type === "aseguradora") add(insurers,r.aseguradora,1);
+  });
+  const leaders = map => {
+    const entries = [...map.values()].sort((a,b)=>b.value-a.value || a.name.localeCompare(b.name,"es"));
+    return entries.filter(e=>e.value === entries[0]?.value);
+  };
+  return {actual, anterior, total, previous, previousFull:sum(anteriorCompleto), ticket:actual.length?total/actual.length:0,
+    previousTicket:anterior.length?previous/anterior.length:0, payment, kams:leaders(kams), insurers:leaders(insurers),
+    delta:total-previous, growth:previous ? (total-previous)/previous*100 : null, cutoff};
+}
+function actualizarResumenNomad() {
+  const selected = Array.from(filtrosMarca).filter(c=>c.checked).map(c=>c.value);
+  const onlyNomad = selected.length === 1 && selected[0] === "NOMAD";
+  document.getElementById("resumenGeneral").hidden = onlyNomad;
+  document.getElementById("resumenNomad").hidden = !onlyNomad;
+  if (!onlyNomad) return;
+  const text = filtroTexto.value.trim().toLowerCase();
+  const s1 = getSelectedValues(filtroStatus1), s2 = getSelectedValues(filtroStatus2);
+  const rows = allRows.filter(r => (!text || [r.folio,r.paciente,r.medico,r.kam].some(v=>String(v||"").toLowerCase().includes(text))) &&
+    (!s1.length || s1.includes(r.status1)) && (!s2.length || s2.includes(r.status2)));
+  const now = new Date(), m = calcularResumenNomad(rows,now);
+  const pct = n => new Intl.NumberFormat("es-MX",{maximumFractionDigits:1}).format(n)+" %";
+  const set = (id,value,detail) => {
+    document.getElementById(id).textContent = value;
+    document.getElementById(id+"Detalle").textContent = detail;
+  };
+  document.getElementById("nomadPeriodo").textContent = now.toLocaleDateString("es-MX",{month:"long",year:"numeric"}) + " · al día " + now.getDate();
+  set("nomadMonto",formatearMoneda(m.total),m.actual.length+" cotizaciones vigentes · NOMAD y Prixz NOMAD");
+  set("nomadTicket",formatearMoneda(m.ticket),"Monto del mes / número de cotizaciones vigentes");
+  set("nomadKam",m.kams.map(e=>e.name).join(" / ") || "Sin cierres con KAM",m.kams.length?formatearMoneda(m.kams[0].value)+" confirmado por KAM"+(m.kams.length>1?" · empate":""):"Solo estatus Cerrada o Cerrada / aceptada");
+  set("nomadAseguradora",m.insurers.map(e=>e.name).join(" / ") || "Sin aseguradora registrada",m.insurers.length?m.insurers[0].value+" cotizaciones por aseguradora"+(m.insurers.length>1?" · empate":""):"No incluye pago de bolsillo ni sin clasificar");
+  const share = n => m.actual.length ? pct(n/m.actual.length*100) : "—";
+  set("nomadPago", "Bolsillo "+share(m.payment.bolsillo)+" · Aseguradora "+share(m.payment.aseguradora),"Sin clasificar: "+share(m.payment.sinClasificar)+" · Base: "+m.actual.length+" cotizaciones");
+  set("nomadComparacion",m.growth === null ? (m.total ? "Sin base comparable" : "Sin movimiento") : (m.growth>0?"+":"")+pct(m.growth),"Actual: "+formatearMoneda(m.total)+" · Anterior al día "+m.cutoff+": "+formatearMoneda(m.previous));
+  document.getElementById("nomadAnalisis").textContent = "El monto del mes "+(m.delta>0?"aumentó ":m.delta<0?"disminuyó ":"no cambió: ")+formatearMoneda(Math.abs(m.delta))+" frente al mismo corte del mes anterior. Cotizaciones: "+m.actual.length+" vs. "+m.anterior.length+". Ticket promedio: "+formatearMoneda(m.ticket)+" vs. "+formatearMoneda(m.previousTicket)+". Total del mes anterior completo: "+formatearMoneda(m.previousFull)+".";
+}
+// Actualizar el período si el dashboard permanece abierto al cambiar de día.
+setInterval(actualizarResumenNomad, 60000);
