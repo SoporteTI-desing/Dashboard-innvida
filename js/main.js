@@ -1042,6 +1042,11 @@ function calcularResumenNomad(rows, now = new Date()) {
   const amount = r => Number.isFinite(Number(r.total)) ? Number(r.total) : 0;
   const sum = list => list.reduce((a,r)=>a+amount(r),0);
   const total = sum(actual), previous = sum(anterior);
+  const esCerrada = r => ["cerrada", "aceptada", "cerrada / aceptada"].includes(normalizarNomad(r.status1));
+  const cerradasActual = actual.filter(esCerrada);
+  const montoCerrado = sum(cerradasActual);
+  const montoCerradoAnterior = sum(anterior.filter(esCerrada));
+  const variacionCerrada = montoCerradoAnterior ? (montoCerrado - montoCerradoAnterior) / montoCerradoAnterior * 100 : null;
   const kams = new Map(), insurers = new Map();
   const payment = { bolsillo:0, aseguradora:0, sinClasificar:0 };
   const add = (map,name,value) => {
@@ -1059,7 +1064,7 @@ function calcularResumenNomad(rows, now = new Date()) {
     const entries = [...map.values()].sort((a,b)=>b.value-a.value || a.name.localeCompare(b.name,"es"));
     return entries.filter(e=>e.value === entries[0]?.value);
   };
-  return {actual, anterior, total, previous, previousFull:sum(anteriorCompleto), ticket:actual.length?total/actual.length:0,
+  return {actual, anterior, total, previous, cerradasActual, montoCerrado, montoCerradoAnterior, variacionCerrada, previousFull:sum(anteriorCompleto), ticket:actual.length?total/actual.length:0,
     previousTicket:anterior.length?previous/anterior.length:0, payment, kams:leaders(kams), insurers:leaders(insurers),
     delta:total-previous, growth:previous ? (total-previous)/previous*100 : null, cutoff};
 }
@@ -1080,13 +1085,13 @@ function actualizarResumenNomad() {
     document.getElementById(id+"Detalle").textContent = detail;
   };
   document.getElementById("nomadPeriodo").textContent = now.toLocaleDateString("es-MX",{month:"long",year:"numeric"}) + " · al día " + now.getDate();
-  set("nomadMonto",formatearMoneda(m.total),m.actual.length+" cotizaciones vigentes · NOMAD y Prixz NOMAD");
+  set("nomadMonto",formatearMoneda(m.montoCerrado),m.cerradasActual.length+" cotizaciones cerradas / aceptadas · NOMAD y Prixz NOMAD");
   set("nomadTicket",formatearMoneda(m.ticket),"Monto del mes / número de cotizaciones vigentes");
   set("nomadKam",m.kams.map(e=>e.name).join(" / ") || "Sin cierres con KAM",m.kams.length?formatearMoneda(m.kams[0].value)+" confirmado por KAM"+(m.kams.length>1?" · empate":""):"Solo estatus Cerrada o Cerrada / aceptada");
   set("nomadAseguradora",m.insurers.map(e=>e.name).join(" / ") || "Sin aseguradora registrada",m.insurers.length?m.insurers[0].value+" cotizaciones por aseguradora"+(m.insurers.length>1?" · empate":""):"No incluye pago de bolsillo ni sin clasificar");
   const share = n => m.actual.length ? pct(n/m.actual.length*100) : "—";
   set("nomadPago", "Bolsillo "+share(m.payment.bolsillo)+" · Aseguradora "+share(m.payment.aseguradora),"Sin clasificar: "+share(m.payment.sinClasificar)+" · Base: "+m.actual.length+" cotizaciones");
-  set("nomadComparacion",m.growth === null ? (m.total ? "Sin base comparable" : "Sin movimiento") : (m.growth>0?"+":"")+pct(m.growth),"Actual: "+formatearMoneda(m.total)+" · Anterior al día "+m.cutoff+": "+formatearMoneda(m.previous));
+  set("nomadComparacion",m.variacionCerrada === null ? (m.montoCerrado ? "Sin base comparable" : "Sin movimiento") : (m.variacionCerrada>0?"+":"")+pct(m.variacionCerrada),"Solo cerradas / aceptadas · Actual: "+formatearMoneda(m.montoCerrado)+" · Anterior al día "+m.cutoff+": "+formatearMoneda(m.montoCerradoAnterior));
 }
 // Actualizar el período si el dashboard permanece abierto al cambiar de día.
 setInterval(actualizarResumenNomad, 60000);
