@@ -1058,10 +1058,13 @@ function calcularResumenNomad(rows, now = new Date(), filasPago = null) {
   };
   actual.forEach(r => {
     if (["cerrada", "cerrada / aceptada"].includes(normalizarNomad(r.status1))) add(kams,r.kam,amount(r));
+  });
+  // La frecuencia de aseguradoras usa únicamente cierres del mes actual.
+  cerradasActual.forEach(r => {
     if (tipoPagoNomad(r.aseguradora) === "aseguradora") add(insurers,r.aseguradora,1);
   });
-  // Aseguradoras y pagos usan el mismo conjunto visible en el detalle.
-  const basePago = filasPago === null ? actual : filasPago.filter(r => r.marca === "NOMAD");
+  // Origen del pago: únicamente cotizaciones del mes calendario actual.
+  const basePago = rows.filter(r => r.marca === "NOMAD" && inMonth(r,actualKey,day));
   basePago.forEach(r => {
     const type = tipoPagoNomad(r.aseguradora); payment[type]++;
   });
@@ -1098,7 +1101,7 @@ function actualizarResumenNomad() {
   set("nomadKam",m.kams.map(e=>e.name).join(" / ") || "Sin cierres con KAM",m.kams.length?formatearMoneda(m.kams[0].value)+" confirmado por KAM"+(m.kams.length>1?" · empate":""):"Solo estatus Cerrada o Cerrada / aceptada");
   set("nomadAseguradora",m.insurers.map(e=>e.name).join(" / ") || "Sin aseguradora registrada",m.insurers.length?m.insurers[0].value+" cotizaciones por aseguradora · mes actual"+(m.insurers.length>1?" · empate":""):"Sin aseguradoras registradas en el mes actual");
   const share = n => m.basePago.length ? pct(n/m.basePago.length*100) : "—";
-  set("nomadPago", "Bolsillo "+share(m.payment.bolsillo)+" · Aseguradora "+share(m.payment.aseguradora),"Sin clasificar: "+share(m.payment.sinClasificar)+" · Base: "+m.basePago.length+" cotizaciones del detalle filtrado");
+  set("nomadPago", "Bolsillo "+share(m.payment.bolsillo)+" · Aseguradora "+share(m.payment.aseguradora),"Sin clasificar: "+share(m.payment.sinClasificar)+" · Base: "+m.basePago.length+" cotizaciones del mes actual");
   set("nomadComparacion",m.variacionCerrada === null ? (m.montoCerrado ? "Sin base comparable" : "Sin movimiento") : (m.variacionCerrada>0?"+":"")+pct(m.variacionCerrada),"Solo cerradas / aceptadas · Actual: "+formatearMoneda(m.montoCerrado)+" · Anterior al día "+m.cutoff+": "+formatearMoneda(m.montoCerradoAnterior));
 }
 // Actualizar el período si el dashboard permanece abierto al cambiar de día.
