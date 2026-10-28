@@ -7,7 +7,8 @@ import {
   collection,
   onSnapshot,
   doc,
-  updateDoc
+  updateDoc,
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
 // CONFIG FIREBASE
@@ -677,6 +678,27 @@ function renderTabla(filas) {
     tr.appendChild(tdStatus1);
     tr.appendChild(tdStatus2);
     tr.appendChild(tdMotivo);
+
+    if (puedeEditarDetalleCompleto()) {
+      const botonEliminar = document.createElement("button");
+      botonEliminar.type = "button";
+      botonEliminar.className = "btn btn-eliminar-cotizacion";
+      botonEliminar.textContent = "×";
+      botonEliminar.setAttribute("aria-label", `Eliminar cotización ${row.folio || "sin folio"}`);
+      botonEliminar.addEventListener("click", async () => {
+        
+        if (!window.confirm("¿Estás seguro de eliminar esta cotización?")) return;
+        botonEliminar.disabled = true;
+        try {
+          await deleteDoc(doc(obtenerBaseDeDatos(), row.collection, row.idFirestore));
+        } catch (e) {
+          console.error("Error eliminando cotización:", e);
+          alert("No se pudo eliminar la cotización en Firebase. Revisa tus permisos e inténtalo de nuevo.");
+          botonEliminar.disabled = false;
+        }
+      });
+      tdMotivo.appendChild(botonEliminar);
+    }
 
     tbody.appendChild(tr);
   });

@@ -523,3 +523,8 @@ body {
 }
 
 /* Reuse existing .btn styles for login button */
+
+.btn-eliminar-cotizacion { background: #7f1d1d; border-color: #b91c1c; color: #fee2e2; white-space: nowrap; }
+.btn-eliminar-cotizacion:hover { background: #991b1b; }
+
+.btn-eliminar-cotizacion { margin-left: 6px; padding: 0; width: 22px; height: 22px; border-radius: 50%; font-size: 18px; line-height: 18px; vertical-align: middle; opacity: .75; }
